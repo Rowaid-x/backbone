@@ -3,6 +3,8 @@ workflows:
     name: iOS Release
     max_build_duration: 60
     instance_type: mac_mini_m2
+    integrations:
+      app_store_connect: Backbone
     environment:
       flutter: stable
       ios_signing:
@@ -19,7 +21,7 @@ workflows:
       - /tmp/xcodebuild_logs/*.log
     publishing:
       app_store_connect:
-        auth: Backbone
+        auth: integration
         submit_to_testflight: true
         beta_groups:
           - App Store Connect Users

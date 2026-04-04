@@ -5,23 +5,20 @@ workflows:
     instance_type: mac_mini_m2
     environment:
       flutter: stable
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.rowaidx.backbone
+      vars:
+        BUNDLE_ID: com.rowaidx.backbone
+        XCODE_WORKSPACE: backbone_app/ios/Runner.xcworkspace
+        XCODE_SCHEME: Runner
     working_directory: backbone_app
     scripts:
       - name: Get dependencies
         script: flutter pub get
-      - name: Build iOS
-        script: |
-          flutter build ipa --release \
-            --export-options-plist=/Users/builder/export_options.plist
+      - name: Build iOS IPA
+        script: flutter build ipa --release --no-codesign
     artifacts:
-      - backbone_app/build/ios/ipa/*.ipa
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
     publishing:
-      app_store_connect:
-        auth: integration
-        submit_to_testflight: true
       email:
         recipients:
           - rowaid@novaskystories.com

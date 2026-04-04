@@ -17,5 +17,5 @@ backbone_app/build/
 backbone_app/.packages
 backbone_app/pubspec.lock
 
-# Screenshots (large files already committed separately)
-backbone/
+# Screenshots folder
+/backbone/

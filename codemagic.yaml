@@ -3,22 +3,34 @@ workflows:
     name: iOS Release
     max_build_duration: 60
     instance_type: mac_mini_m2
+    integrations:
+      app_store_connect: Codemagic
     environment:
       flutter: stable
-      vars:
-        BUNDLE_ID: com.rowaidx.backbone
-        XCODE_WORKSPACE: backbone_app/ios/Runner.xcworkspace
-        XCODE_SCHEME: Runner
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.rowaidx.backbone
     working_directory: backbone_app
     scripts:
       - name: Get dependencies
         script: flutter pub get
+      - name: Set build number
+        script: |
+          BUILD_NUMBER=$(($(app-store-connect get-latest-testflight-build-number com.rowaidx.backbone) + 1))
+          cd ios && agvtool new-version -all $BUILD_NUMBER
       - name: Build iOS IPA
-        script: flutter build ipa --release --no-codesign
+        script: |
+          flutter build ipa --release \
+            --export-options-plist=/Users/builder/export_options.plist
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
     publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        beta_groups:
+          - App Store Connect Users
       email:
         recipients:
           - rowaid@novaskystories.com

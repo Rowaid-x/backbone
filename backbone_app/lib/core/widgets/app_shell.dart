@@ -55,6 +55,8 @@ final _sections = [
   ]),
 ];
 
+final shellScaffoldKey = GlobalKey<ScaffoldState>();
+
 class AppShell extends ConsumerWidget {
   final Widget child;
   const AppShell({super.key, required this.child});
@@ -66,6 +68,7 @@ class AppShell extends ConsumerWidget {
     final isWide = MediaQuery.sizeOf(context).width > 900;
 
     return Scaffold(
+      key: shellScaffoldKey,
       backgroundColor: AppColors.background,
       body: Row(
         children: [

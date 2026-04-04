@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/app_shell.dart';
 
 class BackboneAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;
@@ -16,11 +17,9 @@ class BackboneAppBar extends StatelessWidget implements PreferredSizeWidget {
     return AppBar(
       backgroundColor: AppColors.surface,
       leading: isNarrow
-          ? Builder(
-              builder: (ctx) => IconButton(
-                icon: const Icon(Icons.menu, color: AppColors.textPrimary),
-                onPressed: () => Scaffold.of(ctx).openDrawer(),
-              ),
+          ? IconButton(
+              icon: const Icon(Icons.menu, color: AppColors.textPrimary),
+              onPressed: () => shellScaffoldKey.currentState?.openDrawer(),
             )
           : null,
       automaticallyImplyLeading: false,

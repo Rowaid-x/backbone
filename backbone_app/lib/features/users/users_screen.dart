@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/backbone_app_bar.dart';
 import '../../core/models/user_model.dart';
 import 'users_providers.dart';
 
@@ -14,8 +15,8 @@ class UsersScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Users'),
+      appBar: BackboneAppBar(
+        title: 'Users',
         actions: [
           SizedBox(
             width: 220,

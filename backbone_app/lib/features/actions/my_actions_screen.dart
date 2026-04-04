@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/backbone_app_bar.dart';
 import '../../core/models/action_model.dart';
 import 'actions_providers.dart';
 
@@ -14,7 +15,7 @@ class MyActionsScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('My Actions')),
+      appBar: const BackboneAppBar(title: 'My Actions'),
       body: actionsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) =>

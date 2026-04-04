@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/backbone_app_bar.dart';
 import '../../core/models/user_model.dart';
 import '../../core/models/show_model.dart';
 import '../../core/providers/app_providers.dart';
@@ -58,9 +59,7 @@ class _ProfileBody extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: Text(user.fullName),
-      ),
+      appBar: BackboneAppBar(title: user.fullName),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(

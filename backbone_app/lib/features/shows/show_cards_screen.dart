@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/backbone_app_bar.dart';
 import '../../core/models/show_model.dart';
 import '../../shared/widgets/status_badge.dart';
 import 'shows_providers.dart';
@@ -15,8 +16,8 @@ class ShowCardsScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Show Cards'),
+      appBar: BackboneAppBar(
+        title: 'Show Cards',
         actions: [
           _SearchBar(onSearch: (q) {
             ref.read(showsFilterProvider.notifier).state = q.isEmpty ? {} : {'search': q};

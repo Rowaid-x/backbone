@@ -67,37 +67,6 @@ class AppShell extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: isWide
-          ? null
-          : AppBar(
-              backgroundColor: AppColors.surface,
-              leading: Builder(
-                builder: (ctx) => IconButton(
-                  icon: const Icon(Icons.menu, color: AppColors.textPrimary),
-                  onPressed: () => Scaffold.of(ctx).openDrawer(),
-                ),
-              ),
-              title: Row(
-                children: [
-                  Container(
-                    width: 24,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: const Icon(Icons.rocket_launch, size: 13, color: Colors.black),
-                  ),
-                  const SizedBox(width: 8),
-                  const Text('NOVA',
-                      style: TextStyle(
-                          color: AppColors.textPrimary,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
-                          letterSpacing: 2)),
-                ],
-              ),
-            ),
       body: Row(
         children: [
           if (isWide) _Sidebar(currentLocation: location, user: user, ref: ref),

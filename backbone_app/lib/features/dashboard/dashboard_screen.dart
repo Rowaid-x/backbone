@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/backbone_app_bar.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/models/show_model.dart';
 import '../../core/models/notification_model.dart';
@@ -21,8 +22,8 @@ class DashboardScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Dashboard'),
+      appBar: BackboneAppBar(
+        title: 'Dashboard',
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 16),

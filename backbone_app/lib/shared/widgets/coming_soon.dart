@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
+import 'backbone_app_bar.dart';
 
 class ComingSoonScreen extends StatelessWidget {
   final String featureName;
@@ -9,7 +10,7 @@ class ComingSoonScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: Text(featureName)),
+      appBar: BackboneAppBar(title: featureName),
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,

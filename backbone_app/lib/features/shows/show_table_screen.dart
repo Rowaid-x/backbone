@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/backbone_app_bar.dart';
 import '../../core/models/show_model.dart';
 import '../../shared/widgets/status_badge.dart';
 import 'shows_providers.dart';
@@ -15,7 +16,7 @@ class ShowTableScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('Show Table')),
+      appBar: const BackboneAppBar(title: 'Show Table'),
       body: showsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) =>

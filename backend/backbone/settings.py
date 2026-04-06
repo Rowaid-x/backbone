@@ -24,13 +24,9 @@ INSTALLED_APPS = [
     "django_celery_beat",
     # Apps
     "apps.accounts",
-    "apps.shows",
-    "apps.actions",
+    "apps.schedule",
+    "apps.checklist",
     "apps.notifications",
-    "apps.drones",
-    "apps.shifts",
-    "apps.travel",
-    "apps.integrations",
 ]
 
 MIDDLEWARE = [
@@ -153,3 +149,20 @@ FIREBASE_CREDENTIALS_JSON = os.environ.get("FIREBASE_CREDENTIALS_JSON", "")
 
 # Google Sheets
 GOOGLE_SERVICE_ACCOUNT_JSON = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
+
+SCHEDULE_SHEET_ID = os.environ.get("SCHEDULE_SHEET_ID", "")
+
+# Celery beat: defined here as static fallback; can also be managed via DB scheduler
+from celery.schedules import crontab
+CELERY_BEAT_SCHEDULE = {
+    # Sync sheet every hour
+    "sync-schedule-hourly": {
+        "task": "apps.schedule.tasks.sync_schedule",
+        "schedule": crontab(minute=0),
+    },
+    # Send end-of-day notifications at 21:00 UTC (midnight Qatar)
+    "eod-notifications": {
+        "task": "apps.schedule.tasks.send_eod_notifications",
+        "schedule": crontab(hour=21, minute=0),
+    },
+}

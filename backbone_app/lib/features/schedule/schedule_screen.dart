@@ -114,7 +114,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
             defaultBuilder: (context, day, focusedDay) {
               final key = DateTime(day.year, day.month, day.day);
               final dayEntries = entryMap[key] ?? [];
-              final isBlackedOut = dayEntries.any((e) => e.entryType == EntryType.blacked_out);
+              final isBlackedOut = dayEntries.any((e) => e.entryType == EntryType.blackedOut);
               if (isBlackedOut) {
                 return Container(
                   margin: const EdgeInsets.all(4),
@@ -178,7 +178,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
     switch (type) {
       case EntryType.show:        return AppTheme.colorShow;
       case EntryType.travel:      return AppTheme.colorTravel;
-      case EntryType.blacked_out: return AppTheme.colorBlackedOut;
+      case EntryType.blackedOut: return AppTheme.colorBlackedOut;
       case EntryType.free:        return Colors.transparent;
     }
   }
@@ -257,7 +257,7 @@ class _EntryTile extends StatelessWidget {
 
   String _label(ScheduleEntry e) {
     switch (e.entryType) {
-      case EntryType.blacked_out: return 'Off / Blacked Out';
+      case EntryType.blackedOut: return 'Off / Blacked Out';
       case EntryType.travel:      return 'Travel';
       case EntryType.show:        return e.label;
       case EntryType.free:        return 'Free';
@@ -268,7 +268,7 @@ class _EntryTile extends StatelessWidget {
     switch (type) {
       case EntryType.show:        return AppTheme.colorShow;
       case EntryType.travel:      return AppTheme.colorTravel;
-      case EntryType.blacked_out: return AppTheme.colorBlackedOut;
+      case EntryType.blackedOut: return AppTheme.colorBlackedOut;
       case EntryType.free:        return Colors.white24;
     }
   }

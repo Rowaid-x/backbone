@@ -22,7 +22,7 @@ final checklistVersionDetailProvider =
   return ChecklistVersion.fromJson(res.data as Map<String, dynamic>);
 });
 
-// Mutable local state for the active checklist session (checked items)
+// Checked items for the current session
 class ChecklistSessionNotifier extends StateNotifier<Set<int>> {
   ChecklistSessionNotifier() : super({});
 
@@ -40,4 +40,20 @@ class ChecklistSessionNotifier extends StateNotifier<Set<int>> {
 final checklistSessionProvider =
     StateNotifierProvider<ChecklistSessionNotifier, Set<int>>(
   (_) => ChecklistSessionNotifier(),
+);
+
+// Per-session overrides for configurable item values (id -> value)
+class ChecklistOverridesNotifier extends StateNotifier<Map<int, String>> {
+  ChecklistOverridesNotifier() : super({});
+
+  void set(int itemId, String value) {
+    state = {...state, itemId: value};
+  }
+
+  void clear() => state = {};
+}
+
+final checklistOverridesProvider =
+    StateNotifierProvider<ChecklistOverridesNotifier, Map<int, String>>(
+  (_) => ChecklistOverridesNotifier(),
 );

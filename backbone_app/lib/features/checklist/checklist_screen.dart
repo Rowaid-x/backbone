@@ -482,7 +482,7 @@ class _ParamCell extends StatelessWidget {
           color: isOverridden ? _kSectionGreen.withOpacity(0.1) : const Color(0xFF252525),
           borderRadius: BorderRadius.circular(6),
           border: Border.all(
-            color: isOverridden ? _kSectionGreen.withOpacity(0.5) : Colors.white15,
+            color: isOverridden ? _kSectionGreen.withOpacity(0.5) : Colors.white.withOpacity(0.15),
           ),
         ),
         child: Row(

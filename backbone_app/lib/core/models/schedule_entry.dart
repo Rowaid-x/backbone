@@ -1,19 +1,31 @@
-import 'package:freezed_annotation/freezed_annotation.dart';
+enum EntryType { show, travel, blackedOut, free }
 
-part 'schedule_entry.freezed.dart';
-part 'schedule_entry.g.dart';
+EntryType _parseEntryType(String? s) {
+  switch (s) {
+    case 'show': return EntryType.show;
+    case 'travel': return EntryType.travel;
+    case 'blacked_out': return EntryType.blackedOut;
+    default: return EntryType.free;
+  }
+}
 
-enum EntryType { show, travel, blacked_out, free }
+class ScheduleEntry {
+  final int id;
+  final DateTime date;
+  final EntryType entryType;
+  final String label;
 
-@freezed
-class ScheduleEntry with _$ScheduleEntry {
-  const factory ScheduleEntry({
-    required int id,
-    required DateTime date,
-    required EntryType entryType,
-    @Default('') String label,
-  }) = _ScheduleEntry;
+  const ScheduleEntry({
+    required this.id,
+    required this.date,
+    required this.entryType,
+    this.label = '',
+  });
 
-  factory ScheduleEntry.fromJson(Map<String, dynamic> json) =>
-      _$ScheduleEntryFromJson(json);
+  factory ScheduleEntry.fromJson(Map<String, dynamic> json) => ScheduleEntry(
+        id: json['id'] as int,
+        date: DateTime.parse(json['date'] as String),
+        entryType: _parseEntryType(json['entry_type'] as String?),
+        label: (json['label'] as String?) ?? '',
+      );
 }

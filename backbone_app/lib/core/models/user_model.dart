@@ -1,18 +1,26 @@
-import 'package:freezed_annotation/freezed_annotation.dart';
+class UserModel {
+  final int id;
+  final String email;
+  final String name;
+  final String sheetName;
+  final String region;
+  final String fcmToken;
 
-part 'user_model.freezed.dart';
-part 'user_model.g.dart';
+  const UserModel({
+    required this.id,
+    required this.email,
+    this.name = '',
+    this.sheetName = '',
+    this.region = '',
+    this.fcmToken = '',
+  });
 
-@freezed
-class UserModel with _$UserModel {
-  const factory UserModel({
-    required int id,
-    required String email,
-    @Default('') String name,
-    @Default('') String sheetName,
-    @Default('') String region,
-    @Default('') String fcmToken,
-  }) = _UserModel;
-
-  factory UserModel.fromJson(Map<String, dynamic> json) => _$UserModelFromJson(json);
+  factory UserModel.fromJson(Map<String, dynamic> json) => UserModel(
+        id: json['id'] as int,
+        email: json['email'] as String,
+        name: (json['name'] as String?) ?? '',
+        sheetName: (json['sheet_name'] as String?) ?? '',
+        region: (json['region'] as String?) ?? '',
+        fcmToken: (json['fcm_token'] as String?) ?? '',
+      );
 }

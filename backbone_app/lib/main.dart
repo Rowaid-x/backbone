@@ -1,30 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:firebase_core/firebase_core.dart';
 
 import 'core/router/router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/providers/auth_provider.dart';
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
   runApp(const ProviderScope(child: CoPilotNovaApp()));
 }
 
-class CoPilotNovaApp extends ConsumerWidget {
+class CoPilotNovaApp extends ConsumerStatefulWidget {
   const CoPilotNovaApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // Restore session on startup
-    ref.listen(authProvider, (_, __) {});
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(authProvider.notifier).init();
-    });
+  ConsumerState<CoPilotNovaApp> createState() => _CoPilotNovaAppState();
+}
 
+class _CoPilotNovaAppState extends ConsumerState<CoPilotNovaApp> {
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() => ref.read(authProvider.notifier).init());
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final router = ref.watch(routerProvider);
-
     return MaterialApp.router(
       title: 'CoPilot Nova',
       theme: AppTheme.dark,

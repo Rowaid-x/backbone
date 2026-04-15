@@ -5,14 +5,18 @@ import 'package:go_router/go_router.dart';
 import '../../core/models/checklist_models.dart';
 import '../../core/theme/app_theme.dart';
 import 'checklist_provider.dart';
-import 'save_version_dialog.dart';
 
-// Ordered sheet definitions — emergency is separate/red
-const _sheets = [
+// Section color — mint green matching the xlsx header rows
+const _kSectionGreen = Color(0xFF91FBE3);
+const _kSectionGreenDark = Color(0xFF0D2B24); // dark bg tint of mint
+
+// Sheet tabs shown at top
+const _kSheets = [
   ('flight', 'Flight'),
   ('setup', 'Setup'),
   ('post_show', 'Post-Show'),
   ('multi_show', 'Multi-Show'),
+  ('emergency', 'Emergency'),
 ];
 
 class ChecklistScreen extends ConsumerStatefulWidget {
@@ -22,97 +26,119 @@ class ChecklistScreen extends ConsumerStatefulWidget {
   ConsumerState<ChecklistScreen> createState() => _ChecklistScreenState();
 }
 
-class _ChecklistScreenState extends ConsumerState<ChecklistScreen> {
+class _ChecklistScreenState extends ConsumerState<ChecklistScreen>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabCtrl;
   String _selectedSheet = 'flight';
+  int _sectionPage = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabCtrl = TabController(length: _kSheets.length, vsync: this);
+    _tabCtrl.addListener(() {
+      if (!_tabCtrl.indexIsChanging) {
+        setState(() {
+          _selectedSheet = _kSheets[_tabCtrl.index].$1;
+          _sectionPage = 0;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _tabCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final masterAsync = ref.watch(masterChecklistProvider(_selectedSheet));
-    final versionsAsync = ref.watch(checklistVersionsProvider(_selectedSheet));
     final checked = ref.watch(checklistSessionProvider);
     final overrides = ref.watch(checklistOverridesProvider);
     final isEmergency = _selectedSheet == 'emergency';
 
     return Scaffold(
-      backgroundColor: AppTheme.dark.scaffoldBackgroundColor,
+      backgroundColor: const Color(0xFF0A0A14),
       appBar: AppBar(
-        title: Text(_sheetLabel(_selectedSheet)),
+        backgroundColor: const Color(0xFF0A0A14),
+        elevation: 0,
+        title: const Text('Checklist', style: TextStyle(fontWeight: FontWeight.w600)),
         actions: [
-          // Emergency button — always visible, red accent
-          IconButton(
-            icon: Icon(
-              Icons.warning_amber_rounded,
-              color: isEmergency ? Colors.red : Colors.red.shade300,
+          if (checked.isNotEmpty)
+            TextButton.icon(
+              onPressed: () {
+                ref.read(checklistSessionProvider.notifier).reset();
+                ref.read(checklistOverridesProvider.notifier).clear();
+              },
+              icon: const Icon(Icons.restart_alt, size: 16, color: Colors.red),
+              label: const Text('Reset', style: TextStyle(color: Colors.red, fontSize: 13)),
             ),
-            tooltip: 'Emergency procedures',
-            onPressed: () {
-              setState(() => _selectedSheet = 'emergency');
-            },
-          ),
-          // Switch checklist
-          IconButton(
-            icon: const Icon(Icons.swap_horiz_rounded),
-            tooltip: 'Switch checklist',
-            onPressed: () => _showSheetPicker(context),
-          ),
-          // Versions
-          versionsAsync.maybeWhen(
-            data: (versions) => versions.isEmpty
-                ? const SizedBox.shrink()
-                : IconButton(
-                    icon: const Icon(Icons.folder_open_rounded),
-                    tooltip: 'Saved versions',
-                    onPressed: () => _showVersionsPicker(context, versions),
-                  ),
-            orElse: () => const SizedBox.shrink(),
-          ),
-          IconButton(
-            icon: const Icon(Icons.save_outlined),
-            tooltip: 'Save as version',
-            onPressed: () => showDialog(
-              context: context,
-              builder: (_) => SaveVersionDialog(sheet: _selectedSheet),
-            ),
-          ),
         ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(44),
+          child: TabBar(
+            controller: _tabCtrl,
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
+            indicatorColor: _kSectionGreen,
+            indicatorWeight: 2,
+            labelColor: _kSectionGreen,
+            unselectedLabelColor: Colors.white38,
+            labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 0.3),
+            unselectedLabelStyle: const TextStyle(fontSize: 12),
+            tabs: _kSheets.map((s) {
+              final isEmg = s.$1 == 'emergency';
+              return Tab(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isEmg) ...[
+                      const Icon(Icons.warning_amber_rounded, size: 13, color: Colors.red),
+                      const SizedBox(width: 4),
+                    ],
+                    Text(s.$2, style: isEmg ? const TextStyle(color: Colors.red) : null),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        ),
       ),
       body: masterAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: Colors.white54))),
+        loading: () => const Center(child: CircularProgressIndicator(color: _kSectionGreen)),
+        error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: Colors.white38))),
         data: (items) {
+          // Group items into sections preserving order
+          final sections = _groupSections(items);
+          if (sections.isEmpty) {
+            return const Center(child: Text('No items', style: TextStyle(color: Colors.white38)));
+          }
+
+          // Clamp page
+          final pageCount = sections.length;
+          if (_sectionPage >= pageCount) _sectionPage = pageCount - 1;
+
           final checkableItems = items.where((i) => !i.isConfigurable).toList();
           final checkedCount = checkableItems.where((i) => checked.contains(i.id)).length;
-          final total = checkableItems.length;
 
           return Column(
             children: [
-              // Progress bar
-              if (total > 0 && !isEmergency)
-                _ProgressHeader(checked: checkedCount, total: total),
+              // Progress + section nav
+              _SectionNav(
+                sections: sections.map((s) => s.name).toList(),
+                currentPage: _sectionPage,
+                checkedCount: checkedCount,
+                totalCount: checkableItems.length,
+                isEmergency: isEmergency,
+                onPageTap: (i) => setState(() => _sectionPage = i),
+              ),
 
-              // Emergency warning banner
-              if (isEmergency)
-                Container(
-                  width: double.infinity,
-                  color: Colors.red.shade900.withOpacity(0.3),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 18),
-                      const SizedBox(width: 8),
-                      const Expanded(
-                        child: Text(
-                          'EMERGENCY PROCEDURES — Reference only. Follow your Emergency Response Plan.',
-                          style: TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
+              // Section content — each section is a "page"
               Expanded(
-                child: _ChecklistBody(
-                  items: items,
+                child: _SectionPage(
+                  section: sections[_sectionPage],
                   checked: checked,
                   overrides: overrides,
                   isEmergency: isEmergency,
@@ -120,184 +146,162 @@ class _ChecklistScreenState extends ConsumerState<ChecklistScreen> {
                   onOverride: (id, val) => ref.read(checklistOverridesProvider.notifier).set(id, val),
                 ),
               ),
+
+              // Prev / Next nav
+              _PageNav(
+                current: _sectionPage,
+                total: pageCount,
+                onPrev: () => setState(() => _sectionPage--),
+                onNext: () => setState(() => _sectionPage++),
+              ),
             ],
           );
         },
       ),
-      floatingActionButton: checked.isNotEmpty
-          ? FloatingActionButton.extended(
-              onPressed: () {
-                ref.read(checklistSessionProvider.notifier).reset();
-                ref.read(checklistOverridesProvider.notifier).clear();
-              },
-              label: const Text('Reset'),
-              icon: const Icon(Icons.restart_alt),
-              backgroundColor: Colors.red.shade800,
-            )
-          : null,
     );
   }
 
-  String _sheetLabel(String sheet) {
-    switch (sheet) {
-      case 'flight':    return 'Flight Checklist';
-      case 'setup':     return 'Setup Checklist';
-      case 'post_show': return 'Post-Show Checklist';
-      case 'multi_show': return 'Multi-Show Checklist';
-      case 'emergency': return 'Emergency Procedures';
-      default: return 'Checklist';
+  List<_Section> _groupSections(List<MasterItem> items) {
+    final sections = <_Section>[];
+    _Section? current;
+    for (final item in items) {
+      if (current == null || item.section != current.name) {
+        current = _Section(name: item.section);
+        sections.add(current);
+      }
+      current.items.add(item);
     }
-  }
-
-  void _showSheetPicker(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1A1A2E),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (_) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 0, 20, 12),
-              child: Text('Select Checklist', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600)),
-            ),
-            ..._sheets.map((s) {
-              final selected = _selectedSheet == s.$1;
-              return ListTile(
-                leading: Icon(
-                  _sheetIcon(s.$1),
-                  color: selected ? AppTheme.colorShow : Colors.white38,
-                  size: 20,
-                ),
-                title: Text(
-                  s.$2,
-                  style: TextStyle(
-                    color: selected ? AppTheme.colorShow : Colors.white,
-                    fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-                  ),
-                ),
-                onTap: () {
-                  setState(() => _selectedSheet = s.$1);
-                  Navigator.pop(context);
-                },
-              );
-            }),
-          ],
-        ),
-      ),
-    );
-  }
-
-  IconData _sheetIcon(String sheet) {
-    switch (sheet) {
-      case 'flight':    return Icons.flight_rounded;
-      case 'setup':     return Icons.build_rounded;
-      case 'post_show': return Icons.flag_rounded;
-      case 'multi_show': return Icons.repeat_rounded;
-      default: return Icons.list_rounded;
-    }
-  }
-
-  void _showVersionsPicker(BuildContext context, List<ChecklistVersion> versions) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1A1A2E),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (_) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 0, 20, 12),
-              child: Text('Saved Versions', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600)),
-            ),
-            ...versions.map((v) => ListTile(
-              leading: const Icon(Icons.bookmark_rounded, color: Colors.white38, size: 20),
-              title: Text(v.name, style: const TextStyle(color: Colors.white)),
-              subtitle: Text('by ${v.createdByName}', style: const TextStyle(color: Colors.white38, fontSize: 12)),
-              onTap: () {
-                Navigator.pop(context);
-                context.push('/checklist/version/${v.id}');
-              },
-            )),
-          ],
-        ),
-      ),
-    );
+    return sections;
   }
 }
 
-// ─── Progress header ──────────────────────────────────────────────────────────
+class _Section {
+  final String name;
+  final List<MasterItem> items = [];
+  _Section({required this.name});
+}
 
-class _ProgressHeader extends StatelessWidget {
-  final int checked;
-  final int total;
-  const _ProgressHeader({required this.checked, required this.total});
+// ─── Section nav pills ────────────────────────────────────────────────────────
+
+class _SectionNav extends StatelessWidget {
+  final List<String> sections;
+  final int currentPage;
+  final int checkedCount;
+  final int totalCount;
+  final bool isEmergency;
+  final void Function(int) onPageTap;
+
+  const _SectionNav({
+    required this.sections,
+    required this.currentPage,
+    required this.checkedCount,
+    required this.totalCount,
+    required this.isEmergency,
+    required this.onPageTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final progress = total > 0 ? checked / total : 0.0;
-    final allDone = checked == total;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                allDone ? 'All checks complete' : '$checked / $total checked',
-                style: TextStyle(
-                  color: allDone ? Colors.greenAccent : Colors.white54,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
+    final progress = totalCount > 0 ? checkedCount / totalCount : 0.0;
+    final allDone = checkedCount == totalCount && totalCount > 0;
+    final accentColor = isEmergency ? Colors.red : _kSectionGreen;
+
+    return Column(
+      children: [
+        // Progress bar
+        if (!isEmergency)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(3),
+                    child: LinearProgressIndicator(
+                      value: progress,
+                      minHeight: 3,
+                      backgroundColor: Colors.white10,
+                      valueColor: AlwaysStoppedAnimation(
+                        allDone ? Colors.greenAccent : _kSectionGreen,
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-              if (allDone) ...[
-                const SizedBox(width: 6),
-                const Icon(Icons.check_circle_rounded, color: Colors.greenAccent, size: 14),
+                const SizedBox(width: 10),
+                Text(
+                  allDone ? 'Done!' : '$checkedCount/$totalCount',
+                  style: TextStyle(
+                    color: allDone ? Colors.greenAccent : Colors.white38,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ],
-            ],
-          ),
-          const SizedBox(height: 6),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: progress,
-              minHeight: 4,
-              backgroundColor: Colors.white12,
-              valueColor: AlwaysStoppedAnimation(
-                allDone ? Colors.greenAccent : AppTheme.colorShow,
-              ),
             ),
           ),
-        ],
-      ),
+
+        // Section pills
+        SizedBox(
+          height: 36,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            itemCount: sections.length,
+            itemBuilder: (_, i) {
+              final selected = i == currentPage;
+              return GestureDetector(
+                onTap: () => onPageTap(i),
+                child: Container(
+                  margin: const EdgeInsets.only(right: 6, top: 4, bottom: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  decoration: BoxDecoration(
+                    color: selected ? accentColor.withOpacity(0.15) : Colors.transparent,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: selected ? accentColor.withOpacity(0.6) : Colors.white12,
+                    ),
+                  ),
+                  child: Center(
+                    child: Text(
+                      _shortLabel(sections[i]),
+                      style: TextStyle(
+                        color: selected ? accentColor : Colors.white38,
+                        fontSize: 11,
+                        fontWeight: selected ? FontWeight.w700 : FontWeight.normal,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
+  }
+
+  String _shortLabel(String section) {
+    // Strip leading number+dot for brevity
+    final match = RegExp(r'^\d+\.\s+(.+)').firstMatch(section);
+    final label = match != null ? match.group(1)! : section;
+    // Shorten long labels
+    if (label.length > 16) return '${label.substring(0, 14)}…';
+    return label;
   }
 }
 
-// ─── Checklist body ───────────────────────────────────────────────────────────
+// ─── Section page — two-column layout matching xlsx ──────────────────────────
 
-class _ChecklistBody extends StatelessWidget {
-  final List<MasterItem> items;
+class _SectionPage extends StatelessWidget {
+  final _Section section;
   final Set<int> checked;
   final Map<int, String> overrides;
   final bool isEmergency;
   final void Function(int) onToggle;
   final void Function(int, String) onOverride;
 
-  const _ChecklistBody({
-    required this.items,
+  const _SectionPage({
+    required this.section,
     required this.checked,
     required this.overrides,
     required this.isEmergency,
@@ -307,203 +311,210 @@ class _ChecklistBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    String? currentSection;
-    final widgets = <Widget>[];
+    final accentColor = isEmergency ? Colors.red : _kSectionGreen;
+    final headerBg = isEmergency
+        ? Colors.red.withOpacity(0.12)
+        : _kSectionGreen.withOpacity(0.08);
 
-    for (final item in items) {
-      if (item.section != currentSection) {
-        currentSection = item.section;
-        if (widgets.isNotEmpty) {
-          widgets.add(const SizedBox(height: 4));
-        }
-        widgets.add(_SectionHeader(label: item.section, isEmergency: isEmergency));
-      }
-
-      if (item.isConfigurable) {
-        widgets.add(_ConfigurableItem(
-          item: item,
-          overrideValue: overrides[item.id],
-          onSave: (val) => onOverride(item.id, val),
-        ));
-      } else {
-        widgets.add(_CheckItem(
-          item: item,
-          isChecked: checked.contains(item.id),
-          isEmergency: isEmergency,
-          onToggle: onToggle,
-        ));
-      }
-    }
+    // Separate configurable params from checklist items
+    final params = section.items.where((i) => i.isConfigurable).toList();
+    final checkItems = section.items.where((i) => !i.isConfigurable).toList();
 
     return ListView(
-      padding: const EdgeInsets.only(bottom: 96, top: 4),
-      children: widgets,
-    );
-  }
-}
-
-// ─── Section header ───────────────────────────────────────────────────────────
-
-class _SectionHeader extends StatelessWidget {
-  final String label;
-  final bool isEmergency;
-  const _SectionHeader({required this.label, required this.isEmergency});
-
-  @override
-  Widget build(BuildContext context) {
-    final color = isEmergency ? Colors.red.shade300 : AppTheme.colorShow;
-    return Container(
-      margin: const EdgeInsets.fromLTRB(0, 8, 0, 0),
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
-      decoration: BoxDecoration(
-        border: Border(left: BorderSide(color: color, width: 3)),
-        color: color.withOpacity(0.06),
-      ),
-      child: Text(
-        label.toUpperCase(),
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.w700,
-          fontSize: 11,
-          letterSpacing: 1.2,
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Checkable item ───────────────────────────────────────────────────────────
-
-class _CheckItem extends StatelessWidget {
-  final MasterItem item;
-  final bool isChecked;
-  final bool isEmergency;
-  final void Function(int) onToggle;
-
-  const _CheckItem({
-    required this.item,
-    required this.isChecked,
-    required this.isEmergency,
-    required this.onToggle,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final activeColor = isEmergency ? Colors.red.shade300 : AppTheme.colorShow;
-    return InkWell(
-      onTap: () => onToggle(item.id),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              width: 22,
-              height: 22,
-              decoration: BoxDecoration(
-                color: isChecked ? activeColor : Colors.transparent,
-                border: Border.all(
-                  color: isChecked ? activeColor : Colors.white30,
-                  width: 1.5,
-                ),
-                borderRadius: BorderRadius.circular(5),
-              ),
-              child: isChecked
-                  ? const Icon(Icons.check, size: 14, color: Colors.black)
-                  : null,
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+      children: [
+        // Section header — green bar matching xlsx
+        Container(
+          margin: const EdgeInsets.only(bottom: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: headerBg,
+            border: Border(
+              left: BorderSide(color: accentColor, width: 4),
+              bottom: BorderSide(color: accentColor.withOpacity(0.3), width: 1),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.label,
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  section.name,
+                  style: TextStyle(
+                    color: accentColor,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
+              // Show timing if in name
+              if (_timing(section.name).isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: accentColor.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    _timing(section.name),
                     style: TextStyle(
-                      color: isChecked ? Colors.white30 : Colors.white,
-                      decoration: isChecked ? TextDecoration.lineThrough : null,
-                      decorationColor: Colors.white30,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
+                      color: accentColor,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 11,
                     ),
                   ),
-                  if (item.defaultValue.isNotEmpty && item.defaultValue != 'completed' && item.defaultValue != 'checked')
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        item.defaultValue,
-                        style: const TextStyle(color: Colors.white38, fontSize: 11),
-                      ),
-                    ),
-                ],
-              ),
+                ),
+            ],
+          ),
+        ),
+
+        // Parameters block (white bg in xlsx) — shown as a card at top of section
+        if (params.isNotEmpty) ...[
+          Container(
+            margin: const EdgeInsets.only(top: 8, bottom: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1C1C1C),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.white12),
             ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(12, 8, 12, 4),
+                  child: Text(
+                    'PARAMETERS',
+                    style: TextStyle(
+                      color: Colors.white38,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                ),
+                const Divider(height: 1, color: Colors.white10),
+                // Two-column params grid matching xlsx layout
+                Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: _ParamsGrid(
+                    params: params,
+                    overrides: overrides,
+                    onOverride: onOverride,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+
+        // Checklist items — two-column matching xlsx side-by-side layout
+        if (checkItems.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          _TwoColumnChecklist(
+            items: checkItems,
+            checked: checked,
+            isEmergency: isEmergency,
+            onToggle: onToggle,
+          ),
+        ],
+      ],
+    );
+  }
+
+  String _timing(String section) {
+    final m = RegExp(r'T[-\s]?(\d+:\d+)').firstMatch(section);
+    return m != null ? 'T-${m.group(1)}' : '';
+  }
+}
+
+// ─── Params grid — 2 columns, white card cells ───────────────────────────────
+
+class _ParamsGrid extends StatelessWidget {
+  final List<MasterItem> params;
+  final Map<int, String> overrides;
+  final void Function(int, String) onOverride;
+
+  const _ParamsGrid({required this.params, required this.overrides, required this.onOverride});
+
+  @override
+  Widget build(BuildContext context) {
+    // Lay out params in rows of 2
+    final rows = <List<MasterItem>>[];
+    for (var i = 0; i < params.length; i += 2) {
+      rows.add(params.sublist(i, i + 2 <= params.length ? i + 2 : params.length));
+    }
+
+    return Column(
+      children: rows.map((row) => Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Row(
+          children: [
+            for (var i = 0; i < row.length; i++) ...[
+              if (i > 0) const SizedBox(width: 8),
+              Expanded(child: _ParamCell(item: row[i], overrides: overrides, onOverride: onOverride)),
+            ],
+            if (row.length == 1) const Expanded(child: SizedBox()),
           ],
         ),
-      ),
+      )).toList(),
     );
   }
 }
 
-// ─── Configurable item (editable value) ──────────────────────────────────────
-
-class _ConfigurableItem extends StatelessWidget {
+class _ParamCell extends StatelessWidget {
   final MasterItem item;
-  final String? overrideValue;
-  final void Function(String) onSave;
+  final Map<int, String> overrides;
+  final void Function(int, String) onOverride;
 
-  const _ConfigurableItem({required this.item, this.overrideValue, required this.onSave});
+  const _ParamCell({required this.item, required this.overrides, required this.onOverride});
 
   @override
   Widget build(BuildContext context) {
-    final displayValue = overrideValue ?? item.defaultValue;
-    final isOverridden = overrideValue != null && overrideValue != item.defaultValue;
+    final displayValue = overrides[item.id] ?? item.defaultValue;
+    final isOverridden = overrides[item.id] != null && overrides[item.id] != item.defaultValue;
 
-    return InkWell(
+    return GestureDetector(
       onTap: () => _edit(context, displayValue),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          // White cell from xlsx — dark version in our dark theme
+          color: isOverridden ? _kSectionGreen.withOpacity(0.1) : const Color(0xFF252525),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: isOverridden ? _kSectionGreen.withOpacity(0.5) : Colors.white15,
+          ),
+        ),
         child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const SizedBox(width: 34), // align with checkboxes
             Expanded(
               child: Text(
                 item.label,
-                style: const TextStyle(color: Colors.white70, fontSize: 14),
+                style: const TextStyle(color: Colors.white54, fontSize: 11),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: isOverridden
-                    ? AppTheme.colorShow.withOpacity(0.15)
-                    : Colors.white.withOpacity(0.07),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(
-                  color: isOverridden ? AppTheme.colorShow.withOpacity(0.4) : Colors.white12,
+            const SizedBox(width: 4),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  displayValue,
+                  style: TextStyle(
+                    // Bold value — matches xlsx bold value cells
+                    color: isOverridden ? _kSectionGreen : Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
                 ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    displayValue,
-                    style: TextStyle(
-                      color: isOverridden ? AppTheme.colorShow : Colors.white60,
-                      fontSize: 13,
-                      fontWeight: isOverridden ? FontWeight.w600 : FontWeight.normal,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Icon(
-                    Icons.edit_rounded,
-                    size: 11,
-                    color: isOverridden ? AppTheme.colorShow : Colors.white30,
-                  ),
-                ],
-              ),
+                const SizedBox(width: 3),
+                Icon(
+                  Icons.edit_rounded,
+                  size: 10,
+                  color: isOverridden ? _kSectionGreen : Colors.white24,
+                ),
+              ],
             ),
           ],
         ),
@@ -517,16 +528,16 @@ class _ConfigurableItem extends StatelessWidget {
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A2E),
-        title: Text(item.label, style: const TextStyle(color: Colors.white, fontSize: 15)),
+        title: Text(item.label, style: const TextStyle(color: Colors.white, fontSize: 14)),
         content: TextField(
           controller: controller,
           autofocus: true,
-          style: const TextStyle(color: Colors.white),
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
             hintText: item.defaultValue,
-            hintStyle: const TextStyle(color: Colors.white38),
+            hintStyle: const TextStyle(color: Colors.white24),
             enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppTheme.colorShow)),
+            focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: _kSectionGreen)),
           ),
         ),
         actions: [
@@ -536,10 +547,225 @@ class _ConfigurableItem extends StatelessWidget {
           ),
           TextButton(
             onPressed: () {
-              onSave(controller.text.trim());
+              onOverride(item.id, controller.text.trim());
               Navigator.pop(context);
             },
-            child: Text('Save', style: TextStyle(color: AppTheme.colorShow)),
+            child: const Text('Save', style: TextStyle(color: _kSectionGreen)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Two-column checklist matching xlsx side-by-side layout ──────────────────
+
+class _TwoColumnChecklist extends StatelessWidget {
+  final List<MasterItem> items;
+  final Set<int> checked;
+  final bool isEmergency;
+  final void Function(int) onToggle;
+
+  const _TwoColumnChecklist({
+    required this.items,
+    required this.checked,
+    required this.isEmergency,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // Split into two columns — left half then right half
+    final mid = (items.length / 2).ceil();
+    final leftCol = items.sublist(0, mid);
+    final rightCol = items.sublist(mid);
+
+    // If only a few items (≤ 6), show single column
+    if (items.length <= 5) {
+      return Column(
+        children: items.map((item) => _CheckRow(
+          item: item,
+          isChecked: checked.contains(item.id),
+          isEmergency: isEmergency,
+          onToggle: onToggle,
+        )).toList(),
+      );
+    }
+
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Left column
+          Expanded(
+            child: Column(
+              children: leftCol.map((item) => _CheckRow(
+                item: item,
+                isChecked: checked.contains(item.id),
+                isEmergency: isEmergency,
+                onToggle: onToggle,
+              )).toList(),
+            ),
+          ),
+          // Divider
+          Container(width: 1, color: Colors.white10, margin: const EdgeInsets.symmetric(horizontal: 4)),
+          // Right column
+          Expanded(
+            child: Column(
+              children: rightCol.map((item) => _CheckRow(
+                item: item,
+                isChecked: checked.contains(item.id),
+                isEmergency: isEmergency,
+                onToggle: onToggle,
+              )).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CheckRow extends StatelessWidget {
+  final MasterItem item;
+  final bool isChecked;
+  final bool isEmergency;
+  final void Function(int) onToggle;
+
+  const _CheckRow({
+    required this.item,
+    required this.isChecked,
+    required this.isEmergency,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final accentColor = isEmergency ? Colors.red : _kSectionGreen;
+    // Detect bold items (ALL CAPS = critical step in xlsx)
+    final isCritical = item.label == item.label.toUpperCase() && item.label.length > 3;
+
+    return InkWell(
+      onTap: () => onToggle(item.id),
+      borderRadius: BorderRadius.circular(4),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Checkbox
+            Padding(
+              padding: const EdgeInsets.only(top: 1),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 120),
+                width: 18,
+                height: 18,
+                decoration: BoxDecoration(
+                  color: isChecked ? accentColor : Colors.transparent,
+                  border: Border.all(
+                    color: isChecked ? accentColor : Colors.white30,
+                    width: 1.5,
+                  ),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+                child: isChecked
+                    ? Icon(Icons.check, size: 12, color: isEmergency ? Colors.white : Colors.black)
+                    : null,
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Label + value
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.label,
+                    style: TextStyle(
+                      color: isChecked
+                          ? Colors.white24
+                          : (isCritical ? Colors.white : Colors.white70),
+                      decoration: isChecked ? TextDecoration.lineThrough : null,
+                      decorationColor: Colors.white24,
+                      fontSize: 13,
+                      fontWeight: isCritical ? FontWeight.w700 : FontWeight.normal,
+                      letterSpacing: isCritical ? 0.3 : 0,
+                    ),
+                  ),
+                  if (item.defaultValue.isNotEmpty &&
+                      item.defaultValue != 'checked' &&
+                      item.defaultValue != 'completed' &&
+                      item.defaultValue != 'verified' &&
+                      item.defaultValue != 'transmitted')
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        item.defaultValue,
+                        style: const TextStyle(
+                          color: Colors.white38,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Prev / Next page nav ─────────────────────────────────────────────────────
+
+class _PageNav extends StatelessWidget {
+  final int current;
+  final int total;
+  final VoidCallback onPrev;
+  final VoidCallback onNext;
+
+  const _PageNav({
+    required this.current,
+    required this.total,
+    required this.onPrev,
+    required this.onNext,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: Colors.white10)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          TextButton.icon(
+            onPressed: current > 0 ? onPrev : null,
+            icon: const Icon(Icons.chevron_left, size: 18),
+            label: const Text('Prev'),
+            style: TextButton.styleFrom(
+              foregroundColor: _kSectionGreen,
+              disabledForegroundColor: Colors.white12,
+            ),
+          ),
+          Expanded(
+            child: Center(
+              child: Text(
+                '${current + 1} / $total',
+                style: const TextStyle(color: Colors.white38, fontSize: 12),
+              ),
+            ),
+          ),
+          TextButton.icon(
+            onPressed: current < total - 1 ? onNext : null,
+            icon: const Icon(Icons.chevron_right, size: 18),
+            label: const Text('Next'),
+            style: TextButton.styleFrom(
+              foregroundColor: _kSectionGreen,
+              disabledForegroundColor: Colors.white12,
+            ),
           ),
         ],
       ),

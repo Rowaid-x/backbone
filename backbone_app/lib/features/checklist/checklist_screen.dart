@@ -1,6 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../core/models/checklist_models.dart';
 import 'checklist_provider.dart';
@@ -8,7 +12,7 @@ import 'params_editor_screen.dart';
 
 const _kGreen = Color(0xFF91FBE3);
 
-// ─── Outer shell: two tabs ─────────────────────────────────────────────────────
+// ─── Outer shell: sheet tabs ───────────────────────────────────────────────────
 
 class ChecklistScreen extends StatelessWidget {
   const ChecklistScreen({super.key});
@@ -16,7 +20,7 @@ class ChecklistScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Scaffold(
         backgroundColor: const Color(0xFF0A0A14),
         appBar: AppBar(
@@ -29,17 +33,18 @@ class ChecklistScreen extends StatelessWidget {
             indicatorWeight: 2,
             labelColor: _kGreen,
             unselectedLabelColor: Colors.white38,
-            labelStyle:
-                TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            labelStyle: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
             tabs: [
-              Tab(text: 'Flight Checklist'),
-              Tab(text: 'Legacy Checklist'),
+              Tab(text: 'Daily'),
+              Tab(text: 'Flight'),
+              Tab(text: 'Legacy'),
             ],
           ),
         ),
         body: const TabBarView(
           children: [
-            _FlightChecklist(),
+            _SheetChecklist(sheet: 'daily'),
+            _SheetChecklist(sheet: 'flight'),
             _LegacyChecklist(),
           ],
         ),
@@ -48,21 +53,24 @@ class ChecklistScreen extends StatelessWidget {
   }
 }
 
-// ─── Flight Checklist tab ──────────────────────────────────────────────────────
+// ─── Generic sheet checklist ───────────────────────────────────────────────────
 
-class _FlightChecklist extends ConsumerStatefulWidget {
-  const _FlightChecklist();
+class _SheetChecklist extends ConsumerStatefulWidget {
+  final String sheet;
+  const _SheetChecklist({required this.sheet});
 
   @override
-  ConsumerState<_FlightChecklist> createState() => _FlightChecklistState();
+  ConsumerState<_SheetChecklist> createState() => _SheetChecklistState();
 }
 
-class _FlightChecklistState extends ConsumerState<_FlightChecklist> {
+class _SheetChecklistState extends ConsumerState<_SheetChecklist> {
   int _sectionIndex = 0;
+  // Session-local param overrides: itemId -> value
+  final Map<int, String> _paramOverrides = {};
 
   @override
   Widget build(BuildContext context) {
-    final masterAsync = ref.watch(masterChecklistProvider('flight'));
+    final masterAsync = ref.watch(masterChecklistProvider(widget.sheet));
     final checked = ref.watch(checklistSessionProvider);
 
     return masterAsync.when(
@@ -75,40 +83,41 @@ class _FlightChecklistState extends ConsumerState<_FlightChecklist> {
         final sections = _buildSections(items);
         if (sections.isEmpty) {
           return const Center(
-              child:
-                  Text('No items', style: TextStyle(color: Colors.white38)));
+              child: Text('No items', style: TextStyle(color: Colors.white38)));
         }
         if (_sectionIndex >= sections.length) _sectionIndex = 0;
 
+        // Count only checkable items (non-configurable)
         final allCheckable = items.where((i) => !i.isConfigurable).toList();
         final doneCount =
             allCheckable.where((i) => checked.contains(i.id)).length;
 
         return Column(
           children: [
-            // Top action row: progress + Params button + Reset
+            // Top bar: progress + Params button (flight only) + Reset
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 8, 8, 4),
               child: Row(
                 children: [
                   Expanded(
-                    child: _ProgressBar(
-                        done: doneCount, total: allCheckable.length),
+                    child:
+                        _ProgressBar(done: doneCount, total: allCheckable.length),
                   ),
-                  TextButton.icon(
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => const ParamsEditorScreen()),
+                  if (widget.sheet == 'flight')
+                    TextButton.icon(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const ParamsEditorScreen()),
+                      ),
+                      icon: const Icon(Icons.tune_rounded,
+                          size: 15, color: _kGreen),
+                      label: const Text('Params',
+                          style: TextStyle(color: _kGreen, fontSize: 12)),
+                      style: TextButton.styleFrom(
+                          padding:
+                              const EdgeInsets.symmetric(horizontal: 8)),
                     ),
-                    icon: const Icon(Icons.tune_rounded,
-                        size: 15, color: _kGreen),
-                    label: const Text('Params',
-                        style: TextStyle(color: _kGreen, fontSize: 12)),
-                    style: TextButton.styleFrom(
-                        padding:
-                            const EdgeInsets.symmetric(horizontal: 8)),
-                  ),
                   if (checked.isNotEmpty)
                     IconButton(
                       icon: const Icon(Icons.restart_alt,
@@ -133,12 +142,15 @@ class _FlightChecklistState extends ConsumerState<_FlightChecklist> {
               child: _SectionView(
                 section: sections[_sectionIndex],
                 checked: checked,
+                paramOverrides: _paramOverrides,
                 onToggle: (id) =>
                     ref.read(checklistSessionProvider.notifier).toggle(id),
+                onParamEdit: (id, val) =>
+                    setState(() => _paramOverrides[id] = val),
               ),
             ),
 
-            // Prev / Next
+            // Prev / Next nav
             _PageNav(
               current: _sectionIndex,
               total: sections.length,
@@ -155,12 +167,11 @@ class _FlightChecklistState extends ConsumerState<_FlightChecklist> {
     final result = <_Section>[];
     _Section? cur;
     for (final item in items) {
-      if (item.isConfigurable) continue; // params hidden from checklist
       if (cur == null || item.section != cur.name) {
         cur = _Section(name: item.section);
         result.add(cur);
       }
-      cur.items.add(item);
+      cur.items.add(item); // includes configurable items inline
     }
     return result;
   }
@@ -174,8 +185,43 @@ class _Section {
 
 // ─── Legacy Checklist tab ──────────────────────────────────────────────────────
 
-class _LegacyChecklist extends StatelessWidget {
+class _LegacyChecklist extends StatefulWidget {
   const _LegacyChecklist();
+
+  @override
+  State<_LegacyChecklist> createState() => _LegacyChecklistState();
+}
+
+class _LegacyChecklistState extends State<_LegacyChecklist> {
+  bool _sharing = false;
+
+  Future<void> _shareXlsx() async {
+    setState(() => _sharing = true);
+    try {
+      final data = await rootBundle.load('assets/files/checklist_sr6.4.xlsx');
+      final bytes = data.buffer.asUint8List();
+      final tmp = await getTemporaryDirectory();
+      final file = File(
+          '${tmp.path}/Nova_Sky_Stories_Checklist_SR6.4.xlsx');
+      await file.writeAsBytes(bytes);
+      await Share.shareXFiles(
+        [XFile(file.path,
+            mimeType:
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')],
+        subject: 'Nova Sky Stories Checklist SR6.4',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Error: $e'),
+              backgroundColor: Colors.red.shade900),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sharing = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -185,8 +231,7 @@ class _LegacyChecklist extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.file_download_outlined,
-                color: _kGreen, size: 64),
+            const Icon(Icons.file_present_rounded, color: _kGreen, size: 64),
             const SizedBox(height: 20),
             const Text(
               'Nova Sky Stories\nChecklist SR6.4',
@@ -204,19 +249,19 @@ class _LegacyChecklist extends StatelessWidget {
             ),
             const SizedBox(height: 32),
             ElevatedButton.icon(
-              onPressed: () async {
-                const url =
-                    'http://76.13.213.26:8080/api/checklist/download/';
-                if (await canLaunchUrl(Uri.parse(url))) {
-                  await launchUrl(Uri.parse(url),
-                      mode: LaunchMode.externalApplication);
-                }
-              },
-              icon: const Icon(Icons.download_rounded),
-              label: const Text('Download XLSX'),
+              onPressed: _sharing ? null : _shareXlsx,
+              icon: _sharing
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.black))
+                  : const Icon(Icons.share_rounded),
+              label: const Text('Open / Share XLSX'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: _kGreen,
                 foregroundColor: Colors.black,
+                disabledBackgroundColor: _kGreen.withOpacity(0.4),
                 padding: const EdgeInsets.symmetric(
                     horizontal: 32, vertical: 14),
                 textStyle: const TextStyle(
@@ -297,8 +342,7 @@ class _SectionPills extends StatelessWidget {
               margin: const EdgeInsets.only(right: 6, top: 4, bottom: 4),
               padding: const EdgeInsets.symmetric(horizontal: 10),
               decoration: BoxDecoration(
-                color:
-                    sel ? _kGreen.withOpacity(0.12) : Colors.transparent,
+                color: sel ? _kGreen.withOpacity(0.12) : Colors.transparent,
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(
                   color: sel
@@ -312,8 +356,7 @@ class _SectionPills extends StatelessWidget {
                   style: TextStyle(
                     color: sel ? _kGreen : Colors.white38,
                     fontSize: 11,
-                    fontWeight:
-                        sel ? FontWeight.w700 : FontWeight.normal,
+                    fontWeight: sel ? FontWeight.w700 : FontWeight.normal,
                   ),
                 ),
               ),
@@ -336,38 +379,38 @@ class _SectionPills extends StatelessWidget {
 class _SectionView extends StatelessWidget {
   final _Section section;
   final Set<int> checked;
+  final Map<int, String> paramOverrides;
   final void Function(int) onToggle;
+  final void Function(int, String) onParamEdit;
 
-  const _SectionView(
-      {required this.section,
-      required this.checked,
-      required this.onToggle});
+  const _SectionView({
+    required this.section,
+    required this.checked,
+    required this.paramOverrides,
+    required this.onToggle,
+    required this.onParamEdit,
+  });
+
+  bool get _isEmergency {
+    final n = section.name.toLowerCase();
+    return n.contains('loss') ||
+        n.contains('aircraft') ||
+        n.contains('weather') ||
+        n.contains('geofence') ||
+        n.contains('gps');
+  }
 
   @override
   Widget build(BuildContext context) {
-    final isEmergency = section.name.toLowerCase().contains('loss') ||
-        section.name.toLowerCase().contains('aircraft') ||
-        section.name.toLowerCase().contains('weather') ||
-        section.name.toLowerCase().contains('geofence') ||
-        section.name.toLowerCase().contains('gps');
-    final accent = isEmergency ? Colors.red : _kGreen;
-    final items = section.items;
-
-    // Two columns for sections with many items (matching xlsx layout)
-    final mid = (items.length / 2).ceil();
-    final leftCol = items.sublist(0, mid);
-    final rightCol =
-        mid < items.length ? items.sublist(mid) : <MasterItem>[];
-    final twoCol = items.length > 6 && rightCol.isNotEmpty;
+    final accent = _isEmergency ? Colors.red : _kGreen;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
       children: [
-        // Section header — mint green left-border matching xlsx
+        // Section header
         Container(
           margin: const EdgeInsets.only(bottom: 8),
-          padding:
-              const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
             color: accent.withOpacity(0.08),
             border: Border(left: BorderSide(color: accent, width: 4)),
@@ -387,8 +430,8 @@ class _SectionView extends StatelessWidget {
               ),
               if (_timing(section.name).isNotEmpty)
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
                     color: accent.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(4),
@@ -405,7 +448,7 @@ class _SectionView extends StatelessWidget {
           ),
         ),
 
-        if (isEmergency)
+        if (_isEmergency)
           Container(
             margin: const EdgeInsets.only(bottom: 8),
             padding:
@@ -423,47 +466,23 @@ class _SectionView extends StatelessWidget {
             ),
           ),
 
-        if (twoCol)
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  children: leftCol
-                      .map((item) => _ItemRow(
-                            item: item,
-                            isChecked: checked.contains(item.id),
-                            accent: accent,
-                            onToggle: onToggle,
-                          ))
-                      .toList(),
-                ),
-              ),
-              Container(
-                  width: 1,
-                  color: Colors.white.withOpacity(0.07),
-                  margin: const EdgeInsets.symmetric(horizontal: 4)),
-              Expanded(
-                child: Column(
-                  children: rightCol
-                      .map((item) => _ItemRow(
-                            item: item,
-                            isChecked: checked.contains(item.id),
-                            accent: accent,
-                            onToggle: onToggle,
-                          ))
-                      .toList(),
-                ),
-              ),
-            ],
-          )
-        else
-          ...items.map((item) => _ItemRow(
-                item: item,
-                isChecked: checked.contains(item.id),
-                accent: accent,
-                onToggle: onToggle,
-              )),
+        // Items inline — params rendered as distinct boxes, checkboxes as rows
+        ...section.items.map((item) {
+          if (item.isConfigurable) {
+            return _ParamBox(
+              item: item,
+              currentValue: paramOverrides[item.id] ?? item.defaultValue,
+              onEdit: (val) => onParamEdit(item.id, val),
+            );
+          } else {
+            return _ItemRow(
+              item: item,
+              isChecked: checked.contains(item.id),
+              accent: accent,
+              onToggle: onToggle,
+            );
+          }
+        }),
       ],
     );
   }
@@ -474,7 +493,142 @@ class _SectionView extends StatelessWidget {
   }
 }
 
-// ─── Item row ──────────────────────────────────────────────────────────────────
+// ─── Param box (inline in checklist) ──────────────────────────────────────────
+
+class _ParamBox extends StatelessWidget {
+  final MasterItem item;
+  final String currentValue;
+  final void Function(String) onEdit;
+
+  const _ParamBox({
+    required this.item,
+    required this.currentValue,
+    required this.onEdit,
+  });
+
+  bool get _isEdited => currentValue != item.defaultValue;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => _editDialog(context),
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 3),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: _isEdited
+              ? _kGreen.withOpacity(0.07)
+              : const Color(0xFF13131F),
+          borderRadius: BorderRadius.circular(7),
+          border: Border.all(
+            color: _isEdited
+                ? _kGreen.withOpacity(0.35)
+                : Colors.white.withOpacity(0.08),
+          ),
+        ),
+        child: Row(
+          children: [
+            // Small param indicator dot
+            Container(
+              width: 6,
+              height: 6,
+              margin: const EdgeInsets.only(right: 10),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: _isEdited ? _kGreen : Colors.white24,
+              ),
+            ),
+            Expanded(
+              child: Text(
+                item.label,
+                style: TextStyle(
+                  color: _isEdited ? Colors.white : Colors.white54,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+              decoration: BoxDecoration(
+                color: _isEdited
+                    ? _kGreen.withOpacity(0.15)
+                    : Colors.white.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(5),
+              ),
+              child: Text(
+                currentValue,
+                style: TextStyle(
+                  color: _isEdited ? _kGreen : Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(Icons.edit_rounded,
+                size: 12,
+                color: _isEdited ? _kGreen : Colors.white24),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _editDialog(BuildContext context) {
+    final ctrl = TextEditingController(text: currentValue);
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A2E),
+        title: Text(item.label,
+            style: const TextStyle(color: Colors.white, fontSize: 14)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Default: ${item.defaultValue}',
+                style: const TextStyle(color: Colors.white38, fontSize: 12)),
+            const SizedBox(height: 8),
+            TextField(
+              controller: ctrl,
+              autofocus: true,
+              style: const TextStyle(
+                  color: Colors.white, fontWeight: FontWeight.w600),
+              decoration: const InputDecoration(
+                enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.white24)),
+                focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: _kGreen)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel',
+                style: TextStyle(color: Colors.white38)),
+          ),
+          TextButton(
+            onPressed: () {
+              onEdit(ctrl.text.trim().isEmpty
+                  ? item.defaultValue
+                  : ctrl.text.trim());
+              Navigator.pop(context);
+            },
+            child: const Text('Set',
+                style:
+                    TextStyle(color: _kGreen, fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Checklist item row ────────────────────────────────────────────────────────
 
 class _ItemRow extends StatelessWidget {
   final MasterItem item;
@@ -502,6 +656,7 @@ class _ItemRow extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
+            // Checkbox — filled when checked, no strikethrough
             AnimatedContainer(
               duration: const Duration(milliseconds: 120),
               width: 18,
@@ -515,10 +670,10 @@ class _ItemRow extends StatelessWidget {
                 borderRadius: BorderRadius.circular(3),
               ),
               child: isChecked
-                  ? Icon(Icons.check, size: 12,
-                      color: accent == Colors.red
-                          ? Colors.white
-                          : Colors.black)
+                  ? Icon(Icons.check,
+                      size: 12,
+                      color:
+                          accent == Colors.red ? Colors.white : Colors.black)
                   : null,
             ),
             const SizedBox(width: 8),
@@ -526,16 +681,31 @@ class _ItemRow extends StatelessWidget {
               child: Text(
                 item.label,
                 style: TextStyle(
-                  color: isChecked ? Colors.white24 : Colors.white70,
-                  decoration:
-                      isChecked ? TextDecoration.lineThrough : null,
-                  decorationColor: Colors.white24,
+                  // Dimmed when checked — NO strikethrough
+                  color: isChecked ? Colors.white30 : Colors.white70,
                   fontSize: 13,
                   fontWeight:
                       isCritical ? FontWeight.w700 : FontWeight.normal,
                 ),
               ),
             ),
+            // Show expected value as faint hint on right
+            if (item.defaultValue.isNotEmpty &&
+                item.defaultValue != 'checked' &&
+                item.defaultValue != 'completed')
+              Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: Text(
+                  item.defaultValue,
+                  style: TextStyle(
+                    color: isChecked
+                        ? Colors.white12
+                        : Colors.white.withOpacity(0.25),
+                    fontSize: 11,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -551,11 +721,12 @@ class _PageNav extends StatelessWidget {
   final VoidCallback onPrev;
   final VoidCallback onNext;
 
-  const _PageNav(
-      {required this.current,
-      required this.total,
-      required this.onPrev,
-      required this.onNext});
+  const _PageNav({
+    required this.current,
+    required this.total,
+    required this.onPrev,
+    required this.onNext,
+  });
 
   @override
   Widget build(BuildContext context) {

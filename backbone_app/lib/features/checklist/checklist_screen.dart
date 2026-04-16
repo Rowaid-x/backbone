@@ -760,9 +760,9 @@ class _InfoBottomSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DraggableScrollableSheet(
-      initialChildSize: 0.45,
+      initialChildSize: 0.5,
       minChildSize: 0.3,
-      maxChildSize: 0.85,
+      maxChildSize: 0.92,
       expand: false,
       builder: (_, controller) => Container(
         decoration: const BoxDecoration(
@@ -800,7 +800,8 @@ class _InfoBottomSheet extends StatelessWidget {
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white38, size: 20),
+                    icon: const Icon(Icons.close,
+                        color: Colors.white38, size: 20),
                     onPressed: () => Navigator.pop(context),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
@@ -809,54 +810,61 @@ class _InfoBottomSheet extends StatelessWidget {
               ),
             ),
             const Divider(color: Colors.white10, height: 1),
-            // Scrollable content
+            // Blocks
             Expanded(
-              child: ListView(
+              child: ListView.builder(
                 controller: controller,
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-                children: [
-                  if (item.infoText.isNotEmpty)
-                    Text(
-                      item.infoText,
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 14,
-                        height: 1.6,
-                      ),
-                    ),
-                  if (item.infoImageUrl != null) ...[
-                    if (item.infoText.isNotEmpty) const SizedBox(height: 20),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: Image.network(
-                        item.infoImageUrl!,
-                        fit: BoxFit.contain,
-                        loadingBuilder: (_, child, progress) {
-                          if (progress == null) return child;
-                          return Container(
-                            height: 180,
-                            color: Colors.white.withOpacity(0.05),
-                            child: const Center(
-                              child: CircularProgressIndicator(
-                                  color: _kGreen, strokeWidth: 2),
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+                itemCount: item.infoBlocks.length,
+                itemBuilder: (_, i) {
+                  final block = item.infoBlocks[i];
+                  if (block.blockType == 'image') {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 20),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Image.network(
+                          block.imageUrl ?? '',
+                          fit: BoxFit.contain,
+                          loadingBuilder: (_, child, progress) {
+                            if (progress == null) return child;
+                            return Container(
+                              height: 180,
+                              color: Colors.white.withOpacity(0.04),
+                              child: const Center(
+                                child: CircularProgressIndicator(
+                                    color: _kGreen, strokeWidth: 2),
+                              ),
+                            );
+                          },
+                          errorBuilder: (_, __, ___) => Container(
+                            height: 80,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.04),
+                              borderRadius: BorderRadius.circular(10),
                             ),
-                          );
-                        },
-                        errorBuilder: (_, __, ___) => Container(
-                          height: 100,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.04),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Center(
-                            child: Icon(Icons.broken_image_outlined,
-                                color: Colors.white24, size: 32),
+                            child: const Center(
+                              child: Icon(Icons.broken_image_outlined,
+                                  color: Colors.white24, size: 28),
+                            ),
                           ),
                         ),
                       ),
+                    );
+                  }
+                  // Text block
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: Text(
+                      block.text,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 14,
+                        height: 1.65,
+                      ),
                     ),
-                  ],
-                ],
+                  );
+                },
               ),
             ),
           ],

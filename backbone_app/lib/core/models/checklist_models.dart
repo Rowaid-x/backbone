@@ -1,3 +1,27 @@
+class InfoBlock {
+  final int id;
+  final int order;
+  final String blockType; // "text" or "image"
+  final String text;
+  final String? imageUrl;
+
+  const InfoBlock({
+    required this.id,
+    required this.order,
+    required this.blockType,
+    this.text = '',
+    this.imageUrl,
+  });
+
+  factory InfoBlock.fromJson(Map<String, dynamic> json) => InfoBlock(
+        id: json['id'] as int,
+        order: json['order'] as int,
+        blockType: (json['block_type'] as String?) ?? 'text',
+        text: (json['text'] as String?) ?? '',
+        imageUrl: json['image_url'] as String?,
+      );
+}
+
 class MasterItem {
   final int id;
   final String sheet;
@@ -6,8 +30,7 @@ class MasterItem {
   final String label;
   final String defaultValue;
   final bool isConfigurable;
-  final String infoText;
-  final String? infoImageUrl;
+  final List<InfoBlock> infoBlocks;
 
   const MasterItem({
     required this.id,
@@ -17,11 +40,10 @@ class MasterItem {
     required this.label,
     this.defaultValue = '',
     this.isConfigurable = false,
-    this.infoText = '',
-    this.infoImageUrl,
+    this.infoBlocks = const [],
   });
 
-  bool get hasInfo => infoText.isNotEmpty || infoImageUrl != null;
+  bool get hasInfo => infoBlocks.isNotEmpty;
 
   factory MasterItem.fromJson(Map<String, dynamic> json) => MasterItem(
         id: json['id'] as int,
@@ -31,8 +53,9 @@ class MasterItem {
         label: json['label'] as String,
         defaultValue: (json['default_value'] as String?) ?? '',
         isConfigurable: (json['is_configurable'] as bool?) ?? false,
-        infoText: (json['info_text'] as String?) ?? '',
-        infoImageUrl: json['info_image_url'] as String?,
+        infoBlocks: (json['info_blocks'] as List<dynamic>? ?? [])
+            .map((e) => InfoBlock.fromJson(e as Map<String, dynamic>))
+            .toList(),
       );
 }
 

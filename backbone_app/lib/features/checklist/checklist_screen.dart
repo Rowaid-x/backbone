@@ -835,7 +835,7 @@ class _InfoBottomSheet extends StatelessWidget {
                           if (progress == null) return child;
                           return Container(
                             height: 180,
-                            color: Colors.white05,
+                            color: Colors.white.withOpacity(0.05),
                             child: const Center(
                               child: CircularProgressIndicator(
                                   color: _kGreen, strokeWidth: 2),

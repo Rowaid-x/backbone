@@ -6,6 +6,8 @@ class MasterItem {
   final String label;
   final String defaultValue;
   final bool isConfigurable;
+  final String infoText;
+  final String? infoImageUrl;
 
   const MasterItem({
     required this.id,
@@ -15,7 +17,11 @@ class MasterItem {
     required this.label,
     this.defaultValue = '',
     this.isConfigurable = false,
+    this.infoText = '',
+    this.infoImageUrl,
   });
+
+  bool get hasInfo => infoText.isNotEmpty || infoImageUrl != null;
 
   factory MasterItem.fromJson(Map<String, dynamic> json) => MasterItem(
         id: json['id'] as int,
@@ -25,6 +31,8 @@ class MasterItem {
         label: json['label'] as String,
         defaultValue: (json['default_value'] as String?) ?? '',
         isConfigurable: (json['is_configurable'] as bool?) ?? false,
+        infoText: (json['info_text'] as String?) ?? '',
+        infoImageUrl: json['info_image_url'] as String?,
       );
 }
 

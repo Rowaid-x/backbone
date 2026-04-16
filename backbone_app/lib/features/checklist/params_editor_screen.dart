@@ -301,7 +301,7 @@ class _ParamList extends StatelessWidget {
   }
 }
 
-class _ParamRow extends StatelessWidget {
+class _ParamRow extends StatefulWidget {
   final MasterItem item;
   final String currentValue;
   final bool isEdited;
@@ -315,7 +315,36 @@ class _ParamRow extends StatelessWidget {
   });
 
   @override
+  State<_ParamRow> createState() => _ParamRowState();
+}
+
+class _ParamRowState extends State<_ParamRow> {
+  late final TextEditingController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController(text: widget.currentValue);
+  }
+
+  @override
+  void didUpdateWidget(_ParamRow old) {
+    super.didUpdateWidget(old);
+    // Keep controller text in sync when parent updates the value
+    if (old.currentValue != widget.currentValue) {
+      _ctrl.text = widget.currentValue;
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final isEdited = widget.isEdited;
     return InkWell(
       onTap: () => _edit(context),
       borderRadius: BorderRadius.circular(8),
@@ -336,13 +365,12 @@ class _ParamRow extends StatelessWidget {
         child: Row(
           children: [
             Expanded(
-              child: Text(item.label,
+              child: Text(widget.item.label,
                   style: TextStyle(
                       color: isEdited ? Colors.white : Colors.white70,
                       fontSize: 14)),
             ),
             const SizedBox(width: 12),
-            // Value pill — bold, white background in xlsx
             Container(
               padding:
                   const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -353,7 +381,7 @@ class _ParamRow extends StatelessWidget {
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
-                currentValue,
+                widget.currentValue,
                 style: TextStyle(
                   color: isEdited ? _kGreen : Colors.white,
                   fontWeight: FontWeight.w700,
@@ -372,23 +400,23 @@ class _ParamRow extends StatelessWidget {
   }
 
   void _edit(BuildContext context) {
-    final ctrl = TextEditingController(text: currentValue);
+    _ctrl.text = widget.currentValue;
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A2E),
-        title: Text(item.label,
+        title: Text(widget.item.label,
             style: const TextStyle(color: Colors.white, fontSize: 14)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Default: ${item.defaultValue}',
+            Text('Default: ${widget.item.defaultValue}',
                 style:
                     const TextStyle(color: Colors.white38, fontSize: 12)),
             const SizedBox(height: 8),
             TextField(
-              controller: ctrl,
+              controller: _ctrl,
               autofocus: true,
               style: const TextStyle(
                   color: Colors.white, fontWeight: FontWeight.w600),
@@ -403,16 +431,15 @@ class _ParamRow extends StatelessWidget {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancel',
                 style: TextStyle(color: Colors.white38)),
           ),
           TextButton(
             onPressed: () {
-              onEdit(ctrl.text.trim().isEmpty
-                  ? item.defaultValue
-                  : ctrl.text.trim());
-              Navigator.pop(context);
+              final val = _ctrl.text.trim();
+              widget.onEdit(val.isEmpty ? widget.item.defaultValue : val);
+              Navigator.pop(dialogContext);
             },
             child: const Text('Set',
                 style: TextStyle(

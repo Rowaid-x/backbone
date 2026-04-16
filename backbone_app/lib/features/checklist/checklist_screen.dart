@@ -547,7 +547,19 @@ class _ParamBox extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(width: 8),
+            // Info icon for params that have info
+            if (item.hasInfo)
+              GestureDetector(
+                onTap: () => _InfoBottomSheet.show(context, item),
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 6, right: 2),
+                  child: Icon(Icons.info_outline_rounded,
+                      size: 14,
+                      color: _kGreen.withOpacity(0.75)),
+                ),
+              ),
+            const SizedBox(width: 4),
             Container(
               padding:
                   const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
@@ -706,6 +718,147 @@ class _ItemRow extends StatelessWidget {
                   ),
                 ),
               ),
+            // Info icon — only if item has info
+            if (item.hasInfo)
+              GestureDetector(
+                onTap: () => _showInfo(context),
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 6),
+                  child: Icon(Icons.info_outline_rounded,
+                      size: 16,
+                      color: isChecked
+                          ? _kGreen.withOpacity(0.3)
+                          : _kGreen.withOpacity(0.75)),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showInfo(BuildContext context) =>
+      _InfoBottomSheet.show(context, item);
+}
+
+// ─── Info bottom sheet ─────────────────────────────────────────────────────────
+
+class _InfoBottomSheet extends StatelessWidget {
+  final MasterItem item;
+  const _InfoBottomSheet({required this.item});
+
+  static void show(BuildContext context, MasterItem item) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _InfoBottomSheet(item: item),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.45,
+      minChildSize: 0.3,
+      maxChildSize: 0.85,
+      expand: false,
+      builder: (_, controller) => Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFF13131F),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        child: Column(
+          children: [
+            // Drag handle
+            Container(
+              margin: const EdgeInsets.only(top: 10, bottom: 4),
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            // Header
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline_rounded,
+                      color: _kGreen, size: 18),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      item.label,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white38, size: 20),
+                    onPressed: () => Navigator.pop(context),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(color: Colors.white10, height: 1),
+            // Scrollable content
+            Expanded(
+              child: ListView(
+                controller: controller,
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+                children: [
+                  if (item.infoText.isNotEmpty)
+                    Text(
+                      item.infoText,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 14,
+                        height: 1.6,
+                      ),
+                    ),
+                  if (item.infoImageUrl != null) ...[
+                    if (item.infoText.isNotEmpty) const SizedBox(height: 20),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.network(
+                        item.infoImageUrl!,
+                        fit: BoxFit.contain,
+                        loadingBuilder: (_, child, progress) {
+                          if (progress == null) return child;
+                          return Container(
+                            height: 180,
+                            color: Colors.white05,
+                            child: const Center(
+                              child: CircularProgressIndicator(
+                                  color: _kGreen, strokeWidth: 2),
+                            ),
+                          );
+                        },
+                        errorBuilder: (_, __, ___) => Container(
+                          height: 100,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.04),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Center(
+                            child: Icon(Icons.broken_image_outlined,
+                                color: Colors.white24, size: 32),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ],
         ),
       ),
